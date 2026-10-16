@@ -1,0 +1,290 @@
+<button class="calc-btn" onclick="calcNum('1')">1</button>
+                <button class="calc-btn" onclick="calcNum('2')">2</button>
+                <button class="calc-btn" onclick="calcNum('3')">3</button>
+                <button class="calc-btn" onclick="calcNum('0')">0</button>
+                
+                <button class="calc-btn eq" onclick="calcEquals()">= (Ҳисоблаш)</button>
+                <button class="calc-btn op" style="background: #2563eb;" onclick="useCalcResult()">Формага юбориш</button>
+            </div>
+        </div>
+
+        <!-- Qo'lda kiritish -->
+        <div class="add-form">
+            <input type="text" id="itemName" placeholder="Номи (масалан: Нон, Гўшт, Такси)">
+            <div class="input-row">
+                <input type="number" id="itemAmount" placeholder="Суммаси (масалан: 15000)">
+                <button class="btn-add" id="addBtn">Қўшиш</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ro'yxat va Filtrlash -->
+    <div class="card">
+        <div class="filter-section">
+            <span style="font-weight: 600; font-size: 0.9rem;">Харажатлар рўйхати:</span>
+            <select id="monthFilter">
+                <option value="0">Январь</option>
+                <option value="1">Февраль</option>
+                <option value="2">Март</option>
+                <option value="3">Апрель</option>
+                <option value="4">Май</option>
+                <option value="5">Июнь</option>
+                <option value="6">Июль</option>
+                <option value="7">Август</option>
+                <option value="8">Сентябрь</option>
+                <option value="9">Октябрь</option>
+                <option value="10">Ноябрь</option>
+                <option value="11">Декабрь</option>
+            </select>
+        </div>
+
+        <ul class="expense-list" id="expenseList"></ul>
+
+        <button class="btn-clear-all" id="clearAllBtn">Барча маълумотларни ўчириш</button>
+    </div>
+
+</div>
+
+<script>
+    // Ma'lumotlar ombori
+    let expenses = JSON.parse(localStorage.getItem('my_expenses_data')) || [];
+
+    // Oylar nomi
+    const monthNames = [
+        "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+        "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+    ];
+
+    // Elementlar
+    const micBtn = document.getElementById('micBtn');
+    const statusText = document.getElementById('statusText');
+    const itemName = document.getElementById('itemName');
+    const itemAmount = document.getElementById('itemAmount');
+    const addBtn = document.getElementById('addBtn');
+    const expenseList = document.getElementById('expenseList');
+    const todayTotalEl = document.getElementById('todayTotal');
+    const monthTotalEl = document.getElementById('monthTotal');
+    const monthFilter = document.getElementById('monthFilter');
+    const selectedMonthLabel = document.getElementById('selectedMonthLabel');
+    const clearAllBtn = document.getElementById('clearAllBtn');
+
+    // Hozirgi oy va kunni sozlash
+    const currentDate = new Date();
+    monthFilter.value = currentDate.getMonth();
+
+    // ------------------- OVOZNI TANIASH (Speech Recognition) -------------------
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isListening = false;
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'uz-UZ'; // O'zbek tili
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = () => {
+            isListening = true;
+            micBtn.classList.add('listening');
+            statusText.innerText = "Эшитилмоқда... Масалан: 'Нон 5000'";
+        };
+
+        recognition.onend = () => {
+            isListening = false;
+            micBtn.classList.remove('listening');
+            statusText.innerText = "Овозли киритиш учун микрофонни босинг";
+        };
+
+        recognition.onresult = (event) => {
+            const text = event.results[0][0].transcript;
+            statusText.innerText = `Айтилди: "${text}"`;
+            parseAndAddVoiceData(text);
+        };
+
+        recognition.onerror = (e) => {
+            statusText.innerText = "Овозни аниқлаб бўлмади. Қайта урининг ёки ёзиб киритинг.";
+            micBtn.classList.remove('listening');
+            isListening = false;
+        };
+    } else {
+        statusText.innerText = "Браузер ёки веб-кўриш овозли режимни қўллаб-қувватламайди.";
+    }
+
+    micBtn.addEventListener('click', () => {
+        if (!recognition) {
+            alert("Овозли кириш смартфонингиздаги стандарт веб браузер орқали толиқ ишлайди.");
+            return;
+        }
+        if (isListening) {
+            recognition.stop();
+        } else {
+            recognition.start();
+        }
+    });
+
+    // Ovozli matndan nom va summani ajratib olish
+    function parseAndAddVoiceData(text) {
+        const numbers = text.match(/\d+/g);
+        if (!numbers) {
+            alert("Сумма аниқланмади. Илтимос рақам билан айтинг (масалан: Такси 15000)");
+            return;
+        }
+
+        const amount = parseInt(numbers[numbers.length - 1], 10);
+        let title = text.replace(/\d+/g, '').replace(/со'м|сом|сум/gi, '').trim();
+        if (!title) title = "Харажат";
+
+        addExpense(title, amount);
+    }
+
+    // ------------------- KALKULYATOR LOGIKASI -------------------
+    const calcBox = document.getElementById('calcBox');
+    const calcScreen = document.getElementById('calcScreen');
+    const toggleCalcBtn = document.getElementById('toggleCalcBtn');
+
+    toggleCalcBtn.addEventListener('click', () => {
+        calcBox.style.display = calcBox.style.display === 'block' ? 'none' : 'block';
+    });
+
+    function calcNum(num) {
+        if (calcScreen.value === '0') calcScreen.value = num;
+        else calcScreen.value += num;
+    }
+
+    function calcOp(op) {
+        calcScreen.value += ' ' + op + ' ';
+    }
+
+    function calcClear() {
+        calcScreen.value = '0';
+    }
+
+    function calcEquals() {
+        try {
+            calcScreen.value = eval(calcScreen.value.replace(/×/g, '*').replace(/÷/g, '/'));
+        } catch {
+            calcScreen.value = 'Хатолик';
+        }
+    }
+
+    function useCalcResult() {
+        const val = parseFloat(calcScreen.value);
+        if (!isNaN(val) && val > 0) {
+            itemAmount.value = val;
+            calcBox.style.display = 'none';
+        } else {
+            alert("Тўғри сумма чиқарилмаган!");
+        }
+    }
+
+    // ------------------- XARAJATLARNI BOSHQARISH -------------------
+    addBtn.addEventListener('click', () => {
+        const name = itemName.value.trim();
+        const amount = parseFloat(itemAmount.value);
+
+        if (!name) {
+            alert("Илтимос харажат номини киритинг!");
+            return;
+        }
+        if (isNaN(amount) || amount <= 0) {
+            alert("Илтимос тўғри сумма киритинг!");
+            return;
+        }
+
+        addExpense(name, amount);
+        itemName.value = '';
+        itemAmount.value = '';
+    });
+
+    function addExpense(title, amount) {
+        const now = new Date();
+        const item = {
+            id: Date.now(),
+            title: title,
+            amount: amount,
+            dateStr: now.toISOString(), // Izchil vaqt formati
+            day: now.getDate(),
+            month: now.getMonth(),
+            year: now.getFullYear()
+        };
+
+        expenses.unshift(item);
+        saveAndRender();
+    }
+
+    function deleteExpense(id) {
+        expenses = expenses.filter(item => item.id !== id);
+        saveAndRender();
+    }
+
+    clearAllBtn.addEventListener('click', () => {
+        if (expenses.length === 0) return;
+        if (confirm("Ростдан ҳам барча харажатлар тарихини ўчириб ташламоқчимисиз?")) {
+            expenses = [];
+            saveAndRender();
+        }
+    });
+
+    monthFilter.addEventListener('change', render);
+
+    // ------------------- EKRANGA CHIQARISH VA SAQLASH -------------------
+    function saveAndRender() {
+        localStorage.setItem('my_expenses_data', JSON.stringify(expenses));
+        render();
+    }
+
+    function render() {
+        const selectedMonth = parseInt(monthFilter.value, 10);
+        const currentYear = new Date().getFullYear();
+        const todayDate = new Date().toDateString();
+
+        selectedMonthLabel.innerText = `${monthNames[selectedMonth]} ойлик:`;
+
+        expenseList.innerHTML = '';
+        let todaySum = 0;
+        let monthSum = 0;
+        let count = 0;
+
+        expenses.forEach(item => {
+            const itemDate = new Date(item.dateStr);
+
+            // Bugungi xarajatlar hisobi
+            if (itemDate.toDateString() === todayDate) {
+                todaySum += item.amount;
+            }
+
+            // Tanlangan oy bo'yicha hisob
+            if (item.month === selectedMonth && item.year === currentYear) {
+                monthSum += item.amount;
+                count++;
+
+                const li = document.createElement('li');
+                li.className = 'expense-item';
+                li.innerHTML = `
+                    <div class="item-info">
+                        <span class="item-title">${item.title}</span>
+                        <span class="item-meta">${item.day}-${monthNames[item.month]}, ${itemDate.getHours().toString().padStart(2, '0')}:${itemDate.getMinutes().toString().padStart(2, '0')}</span>
+                    </div>
+                    <div style="display:flex; align-items:center;">
+                        <span class="item-amount">${item.amount.toLocaleString('ru-RU')} сўм</span>
+                        <button class="btn-del" onclick="deleteExpense(${item.id})">✕</button>
+                    </div>
+                `;
+                expenseList.appendChild(li);
+            }
+        });
+
+        if (count === 0) {
+            expenseList.innerHTML = `<div class="empty-msg">${monthNames[selectedMonth]} ойида ҳеч қандай харажат киритилмаган.</div>`;
+        }
+
+        todayTotalEl.innerText = todaySum.toLocaleString('ru-RU') + " сўм";
+        monthTotalEl.innerText = monthSum.toLocaleString('ru-RU') + " сўм";
+    }
+
+    // Ilk yuklanishda render qilish
+    render();
+</script>
+
+</body>
+</html>
